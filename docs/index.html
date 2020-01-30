@@ -1,0 +1,206 @@
+
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="X-UA-Compatible" content="ie=edge" />
+  <title>Data Visualizer</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js/dist/Chart.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+</head>
+
+<body>
+  <canvas id="canvas"></canvas>
+  <script>
+    axios.defaults.baseURL = "https://raw.githubusercontent.com/x9mdwe5q/ncovlog/master/json";
+    // axios.defaults.baseURL = "/json";
+    axios.defaults.responseType = "json";
+    const config = {
+      beginAt: Date.parse("2020-01-14T00:00+0800"),
+      firstRealtimeData: Date.parse("2020-01-28T19:34+0800"),
+      sampleInterval: 1e3 * 60 * 60 * 3
+    };
+    try {
+      location.search.substr(1).split("&").forEach((s) => {
+        const [k, v] = s.split("=");
+        if (k == "s") config.beginAt = Date.parse(v);
+        if (k == "i") config.sampleInterval = 1e3 * 60 * parseFloat(v);
+      });
+    } catch {}
+    const chart = new Chart("canvas", { // https://www.chartjs.org/docs/latest/
+      type: "scatter",
+      data: {
+        datasets: [
+          {
+            label: "confirmed",
+            data: [],
+            borderColor: "#f3bab0",
+            backgroundColor: "#f3bab0",
+            fill: false,
+            cubicInterpolationMode: false,
+            showLine: true
+          },
+          {
+            label: "cured",
+            data: [],
+            borderColor: "#66cc99",
+            backgroundColor: "#66cc99",
+            fill: false,
+            cubicInterpolationMode: false,
+            showLine: true
+          },
+          {
+            label: "dead",
+            data: [],
+            borderColor: "#b4c0d5",
+            backgroundColor: "#b4c0d5",
+            fill: false,
+            cubicInterpolationMode: false,
+            showLine: true
+          }
+        ]
+      },
+      options: {
+        legend: { display: false },
+        scales: {
+          xAxes: [{
+            type: "time",
+            time: { unit: "day" }
+          }],
+          yAxes: [{
+            // type: "linear"
+            type: "logarithmic"
+          }]
+        },
+        elements: {
+          point: {
+            radius: 5,
+            hoverRadius: 10,
+            borderWidth: 2,
+            hoverBorderWidth: 3,
+            pointStyle: "crossRot"
+          },
+          line: {
+            borderWidth: 1
+          }
+        }
+      }
+    })
+  </script>
+  <script>
+    async function loadRealtimeData(time) {
+      const result = { confirmed: 0, cured: 0, dead: 0 };
+      const path = [
+        time.getUTCFullYear().toString(),
+        time.getUTCMonth() + 1,
+        time.getUTCDate(),
+        "/",
+        time.getUTCHours(),
+        time.getUTCMinutes(),
+        ".json"
+      ].map((x) => {
+        if (typeof x === "string") return x;
+        let s = x.toString();
+        if (s.length < 2) s = "0".repeat(2 - s.length) + s;
+        return s;
+      }).join("");
+      const cache = localStorage.getItem(path);
+      if (cache != undefined) {
+        return JSON.parse(cache);
+      }
+      const resp = await axios.get(path);
+      if (resp.data == undefined || resp.data.length === 0) {
+        console.warn(resp);
+        throw new Error(`content of ${path} is empty`);
+      }
+      for (const province of resp.data) {
+        for (const key of Object.keys(result)) {
+          result[key] += province[key + "Count"];
+        }
+      }
+      localStorage.setItem(path, JSON.stringify(result));
+      return result;
+    }
+    function loadOldData(time) {
+      const oldData = [
+        { date: "01.13", confirm: "41", suspect: "0", dead: "1", heal: "0" },
+        { date: "01.14", confirm: "41", suspect: "0", dead: "1", heal: "0" },
+        { date: "01.15", confirm: "41", suspect: "0", dead: "2", heal: "5" },
+        { date: "01.16", confirm: "45", suspect: "0", dead: "2", heal: "8" },
+        { date: "01.17", confirm: "62", suspect: "0", dead: "2", heal: "12" },
+        { date: "01.18", confirm: "198", suspect: "0", dead: "3", heal: "17" },
+        { date: "01.19", confirm: "275", suspect: "0", dead: "4", heal: "18" },
+        { date: "01.20", confirm: "291", suspect: "54", dead: "6", heal: "25" },
+        { date: "01.21", confirm: "440", suspect: "37", dead: "9", heal: "25" },
+        { date: "01.22", confirm: "571", suspect: "393", dead: "17", heal: /* "0" */ "25" },
+        { date: "01.23", confirm: "830", suspect: "1072", dead: "25", heal: "34" },
+        { date: "01.24", confirm: "1287", suspect: "1965", dead: "41", heal: "38" },
+        { date: "01.25", confirm: "1975", suspect: "1965", dead: "42", heal: "38" },
+        { date: "01.26", confirm: "2744", suspect: "2684", dead: "56", heal: "49" },
+        { date: "01.27", confirm: "4515", suspect: "5794", dead: "82", heal: "58" },
+      ]
+      const expect = "01." + (time.getUTCDate() - 1).toString();
+      for (const item of oldData) {
+        if (item.date == expect) {
+          return {
+            confirmed: parseInt(item.confirm),
+            cured: parseInt(item.heal),
+            dead: parseInt(item.dead)
+          }
+        }
+      }
+      return { confirmed: 0, dead: 0, cured: 0 };
+    }
+    async function loadData(timestamp) {
+      const offset = 1e3 * 60 * 60 * 8;
+      const time = new Date(timestamp + offset);
+      if (timestamp < config.firstRealtimeData) return loadOldData(time);
+      return loadRealtimeData(time);
+    }
+  </script>
+  <script>
+    (async function () {
+      let time = config.beginAt;
+      while (time < Date.now()) {
+        console.info(time)
+        let count;
+        try {
+          count = await loadData(time);
+          if (count == undefined) throw new Error(new Date(time).toISOString())
+        } catch (err) {
+          console.warn(err);
+          if (time < config.firstRealtimeData) {
+            time = Math.min(time + 1e3 * 60 * 60 * 24, config.firstRealtimeData);
+          } else {
+            time += config.sampleInterval;
+          }
+          continue;
+        }
+        const mapping = {
+          0: "confirmed",
+          1: "cured",
+          2: "dead"
+        };
+        for (const key of Object.keys(mapping)) {
+          const data = chart.data.datasets[key].data;
+          if (data.length === 0 || data[data.length - 1].y !== count[mapping[key]]) {
+            data.push({
+              x: new Date(time),
+              y: count[mapping[key]]
+            });
+          }
+        }
+        chart.update();
+        if (time < config.firstRealtimeData) {
+          time = Math.min(time + 1e3 * 60 * 60 * 24, config.firstRealtimeData);
+        } else {
+          time += config.sampleInterval;
+        }
+      }
+    })()
+  </script>
+</body>
+
+</html>
