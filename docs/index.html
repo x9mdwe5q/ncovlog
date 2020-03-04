@@ -18,11 +18,14 @@
       beginAt: Date.parse("2020-01-15T00:00+0800"),
       stopAt: Date.now(),
       sampleInterval: 1e3 * 60 * 60 * 8,
-      yAxesType: "logarithmic", // "linear"
+      yAxesType: "linear", // "logarithmic",
+      lineTension: 0.4,
       globalcitizenPrefix: "https://raw.githubusercontent.com/globalcitizen/2019-wuhan-coronavirus-data/master/data-sources/dxy/data/",
       realtimePrefix: "https://raw.githubusercontent.com/x9mdwe5q/ncovlog/master/json/",
+      worldPrefix: "https://raw.githubusercontent.com/x9mdwe5q/ncovlog/master/json_world/",
       timeOffset: 1e3 * 60 * 60 * 8,
-      firstRealtimeData: Date.parse("2020-01-28T19:34+0800")
+      firstRealtimeData: Date.parse("2020-01-28T19:34+0800"),
+      firstWorldData: Date.parse("2020-02-29T08:48+0800")
     };
     try {
       location.search.substr(1).split("&").forEach((s) => {
@@ -33,6 +36,7 @@
         if (k == "a") config.yAxesType = v;
         if (k == "g") config.globalcitizenPrefix = decodeURIComponent(v);
         if (k == "r") config.realtimePrefix = decodeURIComponent(v);
+        if (k == "l") config.lineTension = parseFloat(v);
       });
     } catch { }
     const chart = new Chart("canvas", { // https://www.chartjs.org/docs/latest/
@@ -46,7 +50,8 @@
             backgroundColor: "#f3bab0",
             fill: false,
             cubicInterpolationMode: false,
-            showLine: true
+            showLine: true,
+            lineTension: config.lineTension
           },
           {
             label: "cured",
@@ -55,7 +60,8 @@
             backgroundColor: "#66cc99",
             fill: false,
             cubicInterpolationMode: false,
-            showLine: true
+            showLine: true,
+            lineTension: config.lineTension
           },
           {
             label: "dead",
@@ -64,7 +70,38 @@
             backgroundColor: "#b4c0d5",
             fill: false,
             cubicInterpolationMode: false,
-            showLine: true
+            showLine: true,
+            lineTension: config.lineTension
+          },
+          {
+            label: "confirmedWorld",
+            data: [],
+            borderColor: "#b37a70",
+            backgroundColor: "#b37a70",
+            fill: false,
+            cubicInterpolationMode: false,
+            showLine: true,
+            lineTension: config.lineTension
+          },
+          {
+            label: "curedWorld",
+            data: [],
+            borderColor: "#268c59",
+            backgroundColor: "#268c59",
+            fill: false,
+            cubicInterpolationMode: false,
+            showLine: true,
+            lineTension: config.lineTension
+          },
+          {
+            label: "deadWorld",
+            data: [],
+            borderColor: "#748095",
+            backgroundColor: "#748095",
+            fill: false,
+            cubicInterpolationMode: false,
+            showLine: true,
+            lineTension: config.lineTension
           }
         ]
       },
@@ -98,10 +135,10 @@
       if (s.length < 2) s = "0".repeat(2 - s.length) + s;
       return s;
     }
-    async function loadDingXingYuan(url, cacheID) {
+    async function loadDingXiangYuan(url, cacheID) {
       const cache = localStorage.getItem(cacheID);
       if (cache != undefined) {
-        const [confirm, cure, dead] = cache.split(",");
+        const [confirm, cure, dead] = cache.split(",").map((s) => parseInt(s));
         return { confirm, cure, dead };
       }
       let resp;
@@ -109,7 +146,7 @@
         resp = await axios.get(url);
         if (resp.data == undefined || resp.data.length === 0) throw new Error();
       } catch {
-        throw new Error(url);
+        return {}
       }
       const result = { confirm: 0, cure: 0, dead: 0 };
       for (const province of resp.data) {
@@ -120,20 +157,42 @@
       localStorage.setItem(cacheID, [result.confirm, result.cure, result.dead].map((x) => x.toString()).join(","));
       return result;
     }
+    async function loadWorld(url, cacheID) {
+      const cache = localStorage.getItem(cacheID);
+      if (cache != undefined) {
+        const [confirmWorld, cureWorld, deadWorld] = cache.split(",").map((s) => parseInt(s));
+        return { confirmWorld, cureWorld, deadWorld };
+      }
+      let resp;
+      try {
+        resp = await axios.get(url);
+        if (resp == undefined || resp.length === 0) throw new Error();
+      } catch {
+        return {}
+      }
+      const result = { confirmWorld: 0, cureWorld: 0, deadWorld: 0 };
+      for (const area of resp.data) {
+        result.confirmWorld += area.confirmedCount;
+        result.cureWorld += area.curedCount;
+        result.deadWorld += area.deadCount;
+      }
+      localStorage.setItem(cacheID, [result.confirmWorld, result.cureWorld, result.deadWorld].map((x) => x.toString()).join(","));
+      return result;
+    }
     function makeOldData() {
       const tencentData = [
-        { time: 1579017600000 , load: () => ({ confirm: 41, dead: 1, cure: 0 }) },
-        { time: 1579104000000 , load: () => ({ confirm: 41, dead: 1, cure: 0 }) },
-        { time: 1579190400000 , load: () => ({ confirm: 41, dead: 2, cure: 5 }) },
-        { time: 1579276800000 , load: () => ({ confirm: 45, dead: 2, cure: 8 }) },
-        { time: 1579363200000 , load: () => ({ confirm: 62, dead: 2, cure: 12 }) },
-        { time: 1579449600000 , load: () => ({ confirm: 198, dead: 3, cure: 17 }) },
-        { time: 1579536000000 , load: () => ({ confirm: 275, dead: 4, cure: 18 }) },
-        { time: 1579622400000 , load: () => ({ confirm: 291, dead: 6, cure: 25 }) },
-        { time: 1579708800000 , load: () => ({ confirm: 440, dead: 9, cure: 25 }) },
-        { time: 1579795200000 , load: () => ({ confirm: 571, dead: 17, cure: /* 0 */ 25 }) },
-        { time: 1579881600000 , load: () => ({ confirm: 830, dead: 25, cure: 34 }) },
-        { time: 1579968000000 , load: () => ({ confirm: 1287, dead: 41, cure: 38 }) }
+        { time: 1579017600000, load: () => ({ confirm: 41, dead: 1 }) },
+        { time: 1579104000000, load: () => ({ confirm: 41, dead: 1 }) },
+        { time: 1579190400000, load: () => ({ confirm: 41, dead: 2, cure: 5 }) },
+        { time: 1579276800000, load: () => ({ confirm: 45, dead: 2, cure: 8 }) },
+        { time: 1579363200000, load: () => ({ confirm: 62, dead: 2, cure: 12 }) },
+        { time: 1579449600000, load: () => ({ confirm: 198, dead: 3, cure: 17 }) },
+        { time: 1579536000000, load: () => ({ confirm: 275, dead: 4, cure: 18 }) },
+        { time: 1579622400000, load: () => ({ confirm: 291, dead: 6, cure: 25 }) },
+        { time: 1579708800000, load: () => ({ confirm: 440, dead: 9, cure: 25 }) },
+        { time: 1579795200000, load: () => ({ confirm: 571, dead: 17, cure: /* 0 */ 25 }) },
+        { time: 1579881600000, load: () => ({ confirm: 830, dead: 25, cure: 34 }) },
+        { time: 1579968000000, load: () => ({ confirm: 1287, dead: 41, cure: 38 }) }
       ];
       const globalcitizenData = [
         1579969920, 1579997880, 1580003580, 1580007960, 1580012820, 1580014380, 1580066460, 1580077860, 1580079060, 1580083200, 1580112300, 1580120520, 1580121060, 1580123580, 1580128740, 1580129940, 1580139180, 1580140440, 1580141880, 1580163960, 1580170680, 1580172000, 1580174220, 1580175300, 1580177160, 1580180460, 1580182740, 1580188080, 1580190240, 1580194740, 1580196840, 1580197620, 1580198100, 1580202000, 1580205120, 1580212140, 1580213100, 1580216400, 1580228580, 1580232120, 1580260380, 1580261100, 1580261460, 1580262060, 1580264040, 1580265120, 1580265900, 1580266320, 1580267820, 1580273100, 1580274480, 1580275320, 1580277240, 1580279940, 1580280840, 1580281380, 1580282100, 1580283300, 1580284440, 1580286240, 1580289120, 1580294640, 1580296440, 1580310060, 1580311740, 1580315340, 1580316240, 1580339280, 1580339580, 1580341740, 1580342880, 1580344200, 1580344800, 1580345940, 1580346540, 1580347200, 1580348400, 1580350800, 1580358240, 1580358600, 1580359740, 1580361060
@@ -142,13 +201,13 @@
         load: (async function (time) {
           const date = new Date(time + config.timeOffset);
           const url = `${config.globalcitizenPrefix}202001${pad2(date.getUTCDate())}-${pad2(date.getUTCHours())}${pad2(date.getUTCMinutes())}00-dxy-2019ncov-data.json`;
-          return loadDingXingYuan(url, "gc." + (time / 1000).toString())
+          return loadDingXiangYuan(url, "gc." + (time / 1000).toString())
         }).bind(null, time)
       }));
       return [].concat(tencentData, globalcitizenData).sort((a, b) => a.time - b.time);
     }
     function makeZeroData(time) {
-      return { time: time, load: () => ({ confirm: 0, cure: 0, dead: 0 }) };
+      return { time: time, load: () => ({  }) };
     }
     function makeRealtimeData(time) {
       return {
@@ -156,20 +215,36 @@
         load: (async function (time) {
           const date = new Date(time + config.timeOffset);
           const url = `${config.realtimePrefix}2020${pad2(date.getUTCMonth() + 1)}${pad2(date.getUTCDate())}/${pad2(date.getUTCHours())}${pad2(date.getUTCMinutes())}.json`
-          return loadDingXingYuan(url, "rt." + (time / 1000).toString())
+          return loadDingXiangYuan(url, "rt." + (time / 1000).toString())
+        }).bind(null, time)
+      }
+    }
+    function makeRealtimeWorld(time) {
+      return {
+        time: time,
+        load: (async function (time) {
+          const date = new Date(time + config.timeOffset);
+          const url = `${config.worldPrefix}2020${pad2(date.getUTCMonth() + 1)}${pad2(date.getUTCDate())}/${pad2(date.getUTCHours())}${pad2(date.getUTCMinutes())}.json`
+          return loadWorld(url, "wd." + (time / 1000).toString())
+        }).bind(null, time)
+      }
+    }
+    function makeRealtimeCombined(time) {
+      return {
+        time: time,
+        load: (async function (time) {
+          return Object.assign({}, ...await Promise.all([
+            makeRealtimeData(time).load(),
+            makeRealtimeWorld(time).load()
+          ]))
         }).bind(null, time)
       }
     }
     async function updateChart(time, load) {
-      let count;
-      try {
-        count = await load();
-      } catch (err) {
-        console.warn(`load ${new Date(time)}:\n${err}`);
-        return;
-      }
-      const mapping = { 0: "confirm", 1: "cure", 2: "dead" };
+      const count = await load();
+      const mapping = { 0: "confirm", 1: "cure", 2: "dead", 3: "confirmWorld", 4: "cureWorld", 5: "deadWorld" };
       for (const key of Object.keys(mapping)) {
+        if (count[mapping[key]] === undefined) continue;
         const arr = chart.data.datasets[key].data;
         if (arr.length === 0 || arr[arr.length - 1].y !== count[mapping[key]]) {
           arr.push({
@@ -187,7 +262,11 @@
       let latestData, nextIndex = 0;
       for (let time = config.beginAt; time < config.stopAt; time += config.sampleInterval) {
         if (time >= config.firstRealtimeData) {
-          latestData = makeRealtimeData(time);
+          if (time >= config.firstWorldData) {
+            latestData = makeRealtimeCombined(time);
+          } else {
+            latestData = makeRealtimeData(time);
+          }
         } else {
           while (nextIndex < oldData.length && oldData[nextIndex].time <= time) {
             latestData = oldData[nextIndex];
